@@ -1,24 +1,24 @@
-import { z } from "zod";
-import { createGroq, GroqProviderSettings } from "@ai-sdk/groq";
+import { AnthropicProviderSettings, createAnthropic } from "@ai-sdk/anthropic";
+import { DeepInfraProviderSettings, createDeepInfra } from "@ai-sdk/deepinfra";
+import { DeepSeekProviderSettings, createDeepSeek } from "@ai-sdk/deepseek";
+import { GoogleGenerativeAIProviderSettings, createGoogleGenerativeAI } from "@ai-sdk/google";
+import { GroqProviderSettings, createGroq } from "@ai-sdk/groq";
+import { OpenAIProviderSettings, createOpenAI } from "@ai-sdk/openai";
 import {
-  generateText,
-  generateObject,
+  CoreMessage,
+  CoreTool,
   CoreUserMessage,
   GenerateTextResult,
-  CoreTool,
-  streamText,
-  StreamTextResult,
-  tool,
   Output,
-  CoreMessage,
+  StreamTextResult,
+  generateObject,
+  generateText,
+  streamText,
+  tool,
 } from "ai";
-import { createGoogleGenerativeAI, GoogleGenerativeAIProviderSettings } from "@ai-sdk/google";
-import { createOpenAI, OpenAIProviderSettings } from "@ai-sdk/openai";
-import { AnthropicProviderSettings, createAnthropic } from "@ai-sdk/anthropic";
-import { createDeepSeek, DeepSeekProviderSettings } from "@ai-sdk/deepseek";
-import { JigsawStack } from "jigsawstack";
 import { createFallback } from "ai-fallback";
-import { createDeepInfra, DeepInfraProviderSettings } from "@ai-sdk/deepinfra";
+import { JigsawStack } from "jigsawstack";
+import { z } from "zod";
 
 export interface GeneratePromptObj {
   role: CoreUserMessage["role"];
@@ -56,19 +56,18 @@ interface ToolUsed {
 
 type GenerateBase = {
   toolUsed?: ToolUsed[];
-  reasoning?: string;
+  reasoning_text?: string;
   object?: Awaited<ReturnType<typeof generateText>>["experimental_output"];
   partialObjectStream?: ReturnType<typeof streamText>["experimental_partialOutputStream"];
   model_id: string;
+  textStream?: ReturnType<typeof streamText>["textStream"];
 };
 
-export type GenerateResponse = (
-  | GenerateTextResult<Record<string, CoreTool<any, any>>, any>
-  | StreamTextResult<Record<string, CoreTool<any, any>>, any>
-) &
+export type GenerateResponse = GenerateTextResult<Record<string, CoreTool<any, any>>, any> &
+  StreamTextResult<Record<string, CoreTool<any, any>>, any> &
   GenerateBase;
 
-export type EmbeddingParams = Parameters<ReturnType<typeof JigsawStack>["embedding"]>["0"];
+export type EmbeddingParams = Omit<Parameters<ReturnType<typeof JigsawStack>["embedding"]>["0"], "token_overflow_mode" | "file_store_key">;
 export type EmbeddingResponse = Awaited<ReturnType<ReturnType<typeof JigsawStack>["embedding"]>>;
 
 export interface EmbedParams {
@@ -105,10 +104,11 @@ export const createOmiAI = (config?: {
   anthropicProviderConfig?: AnthropicProviderSettings;
   deepseekProviderConfig?: DeepSeekProviderSettings;
   deepinfraProviderConfig?: DeepInfraProviderSettings;
-  jigsawProviderConfig?: Parameters<typeof JigsawStack>;
+  jigsawProviderConfig?: NonNullable<Parameters<typeof JigsawStack>["0"]>;
 }) => {
   const groq = createGroq({
     apiKey: process.env?.GROQ_API_KEY || undefined,
+    ...config?.groqProviderConfig,
   });
 
   const google = createGoogleGenerativeAI({
@@ -298,8 +298,6 @@ export const createOmiAI = (config?: {
         ...f,
       }));
 
-      console.log("latestPromptFiles", latestPromptFiles);
-
       const tools = {
         web_search: tool({
           description: "Search the web for the given query",
@@ -330,7 +328,6 @@ export const createOmiAI = (config?: {
               url: url.includes("https://onellmref.com") ? latestPromptFiles.find((f) => f.ref == url)?.data || url : url,
               element_prompts: fields,
             });
-            console.log("scrapedData", scrapedData);
             return scrapedData.context;
           },
         }),
@@ -341,7 +338,6 @@ export const createOmiAI = (config?: {
             fields: z.array(z.string()).describe("fields to extract from the image or PDF"),
           }),
           execute: async ({ url, fields }) => {
-            console.log("fields", url);
             const scrapedData = await jigsaw.vision.vocr({
               url: url.includes("https://onellmref.com") ? latestPromptFiles.find((f) => f.ref == url)?.data || url : url,
               prompt: fields,
@@ -371,8 +367,6 @@ export const createOmiAI = (config?: {
         })
       ).object;
 
-      console.log("model selected", preConfigModel);
-
       const selectedModelID = preConfigModel.model;
       const modelConfig = modelList[selectedModelID];
 
@@ -381,8 +375,6 @@ export const createOmiAI = (config?: {
 
       if (latestTextPrompt) {
         if ((context_tool?.web || preConfigModel.web_search) && context_tool?.web !== false) {
-          console.log("searching web", latestTextPrompt);
-
           searchResult = await jigsaw.web.search({
             query: latestTextPrompt,
             ai_overview: false,
@@ -415,8 +407,6 @@ export const createOmiAI = (config?: {
       }
 
       if (preConfigModel.use_tool && auto_tool) {
-        console.log("using tool");
-
         const toolResult = await generateText({
           model: createFallback({
             models: [modelList["gpt-4o"].modelProvider, groq("llama-3.3-70b-versatile"), openai("gpt-4o-mini")],
@@ -434,8 +424,6 @@ export const createOmiAI = (config?: {
           topK,
           topP,
         });
-
-        console.log("toolResult", toolResult);
 
         const toolText = toolResult.text;
 
@@ -456,8 +444,6 @@ export const createOmiAI = (config?: {
             args: t.args,
           }))
         );
-
-        console.log("allToolCalls", allToolCalls);
 
         prompts.splice(prompts.length - 1, 0, {
           role: "user",
@@ -486,8 +472,6 @@ export const createOmiAI = (config?: {
         if (reasoningText?.includes("<think>")) {
           reasoningText = reasoningText.split("<think>")[1].split("</think>")[0]?.trim();
         }
-
-        console.log("reasoningText", reasoningText);
 
         prompts.splice(prompts.length - 1, 0, {
           role: "user",
@@ -548,7 +532,7 @@ export const createOmiAI = (config?: {
       llmResult["model_id"] = selectedModelID;
 
       if (reasoningText) {
-        llmResult.reasoning = reasoningText;
+        llmResult["reasoning_text"] = reasoningText;
       }
 
       if (schema) {
@@ -560,12 +544,6 @@ export const createOmiAI = (config?: {
       }
 
       return llmResult;
-
-      // if (stream) {
-      //   return llmResult as StreamTextResult<Record<string, CoreTool<any, any>>, never>;
-      // } else {
-      //   return llmResult as GenerateTextResult<Record<string, CoreTool<any, any>>, never>;
-      // }
     } catch (error: any) {
       throw error;
     }
