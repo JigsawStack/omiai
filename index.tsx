@@ -98,7 +98,7 @@ const messageMap = (prompts: GeneratePromptObj[], removeMedia: boolean = false) 
   return messageMapped;
 };
 
-export const createOmniAI = (config?: {
+export const createOmiAI = (config?: {
   groqProviderConfig?: GroqProviderSettings;
   googleProviderConfig?: GoogleGenerativeAIProviderSettings;
   openaiProviderConfig?: OpenAIProviderSettings;
