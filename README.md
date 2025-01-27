@@ -1,6 +1,6 @@
 # OmniAI SDK
 
-OmniAI is a LLM SDK for Typescript. It is an highly opinionated AI SDK with auto-model selection, built-in reasoning and curated tools.
+OmniAI is a LLM SDK for Typescript. It is a highly opinionated AI SDK with auto-model selection, built-in reasoning and curated tools.
 
 - Pre-selected list of models based on model quality, speed and cost
 - Automatically picks the best model for each task

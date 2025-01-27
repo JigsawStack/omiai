@@ -1,6 +1,6 @@
 {
   "name": "omniai",
-  "description": "OmniAI - An highly opinionated AI SDK with auto-model selection, built-in reasoning and curated tools",
+  "description": "OmniAI - A highly opinionated AI SDK with auto-model selection, built-in reasoning and curated tools",
   "keywords": ["framework", "ai", "llm", "react"],
   "type": "module",
   "version": "0.0.1",
