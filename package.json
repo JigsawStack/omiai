@@ -1,6 +1,14 @@
 {
   "name": "omniai",
   "description": "OmniAI - A highly opinionated AI SDK with auto-model selection, built-in reasoning and curated tools",
+  "homepage": "https://github.com/JigsawStack/omniai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JigsawStack/omniai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JigsawStack/omniai/issues"
+  },
   "keywords": ["framework", "ai", "llm", "react"],
   "type": "module",
   "version": "0.0.1",
