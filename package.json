@@ -11,7 +11,7 @@
   },
   "keywords": ["framework", "ai", "llm", "react"],
   "type": "module",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "packageManager": "yarn@1.22.22",
   "license": "Apache-2.0",
   "engines": {
@@ -43,7 +43,6 @@
     "@ai-sdk/groq": "^1.1.2",
     "@ai-sdk/openai": "^1.1.2",
     "ai": "^4.1.5",
-    "ai-fallback": "^0.1.1",
     "jigsawstack": "^0.0.23",
     "zod": "^3.24.1"
   },

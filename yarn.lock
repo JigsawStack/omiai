@@ -88,7 +88,7 @@
     nanoid "^3.3.8"
     secure-json-parse "^2.7.0"
 
-"@ai-sdk/provider-utils@2.1.4", "@ai-sdk/provider-utils@^2.0.4":
+"@ai-sdk/provider-utils@2.1.4":
   version "2.1.4"
   resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-2.1.4.tgz#3f6d112f9b955f4b8543d7acde6c6dd31fe76710"
   integrity sha512-KrGr76ebmN3onrb+bQihgXZyYgYu/kClB+YjFmR1uXQpJG067rCBDWuTHvpI7vwPdQQDvIIgZ+0U5G4V+dN74w==
@@ -98,7 +98,7 @@
     nanoid "^3.3.8"
     secure-json-parse "^2.7.0"
 
-"@ai-sdk/provider@1.0.6", "@ai-sdk/provider@^1.0.2":
+"@ai-sdk/provider@1.0.6":
   version "1.0.6"
   resolved "https://registry.yarnpkg.com/@ai-sdk/provider/-/provider-1.0.6.tgz#ab7e53a48a2cefe7bd593590a611b2ce12465bc3"
   integrity sha512-hwj/gFNxpDgEfTaYzCYoslmw01IY9kWLKl/wf8xuPvHtQIzlfXWmmUwc8PnCwxyt8cKzIuV0dfUghCf68HQ0SA==
@@ -589,14 +589,6 @@
   version "1.20.2"
   resolved "https://registry.yarnpkg.com/@types/resolve/-/resolve-1.20.2.tgz#97d26e00cd4a0423b4af620abecf3e6f442b7975"
   integrity sha512-60BCwRFOZCQhDncwQdxxeOEEkbc5dIMccYLwbxsS4TUNeVECQ/pBJ0j09mrHOl/JJvpRPGwO9SvE4nR2Nb/a4Q==
-
-ai-fallback@^0.1.1:
-  version "0.1.1"
-  resolved "https://registry.yarnpkg.com/ai-fallback/-/ai-fallback-0.1.1.tgz#1012fe4cc46bec0ca9beba21fec12d2bf1d64326"
-  integrity sha512-ZjSQ/5yD4bzBa+z1TlPf8i58Kr3nKqzrbBr5XV9sutPrVbBNQIBC7mD9QNhq5/vCNdSYHQ7kxDVjlOoG5XnnRg==
-  dependencies:
-    "@ai-sdk/provider" "^1.0.2"
-    "@ai-sdk/provider-utils" "^2.0.4"
 
 ai@^4.1.5:
   version "4.1.5"

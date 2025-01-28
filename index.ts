@@ -16,7 +16,6 @@ import {
   streamText,
   tool,
 } from "ai";
-import { createFallback } from "ai-fallback";
 import { JigsawStack } from "jigsawstack";
 import { z } from "zod";
 
@@ -34,14 +33,14 @@ export interface GeneratePromptObj {
 export interface GenerateParams {
   stream?: boolean;
   reasoning?: boolean;
-  multi_llm?: boolean;
+  multiLLM?: boolean;
   system?: string;
   prompt: string | GeneratePromptObj[];
   schema?: z.ZodSchema;
-  context_tool?: {
+  contextTool?: {
     web?: boolean;
   };
-  auto_tool?: boolean;
+  autoTool?: boolean;
   temperature?: number;
   topK?: number;
   topP?: number;
@@ -54,27 +53,34 @@ interface ToolUsed {
   type: "tool-call" | "tool-context-use";
 }
 
+type Files = {
+  type: "image" | "file";
+  data: Blob | string;
+  mimeType?: string;
+};
+
 type GenerateBase = {
   toolUsed?: ToolUsed[];
-  reasoning_text?: string;
+  reasoningText?: string;
   object?: Awaited<ReturnType<typeof generateText>>["experimental_output"];
   partialObjectStream?: ReturnType<typeof streamText>["experimental_partialOutputStream"];
-  model_id: string;
+  modelId: string;
   textStream?: ReturnType<typeof streamText>["textStream"];
+  files?: Files[];
 };
 
 export type GenerateResponse = GenerateTextResult<Record<string, CoreTool<any, any>>, any> &
   StreamTextResult<Record<string, CoreTool<any, any>>, any> &
   GenerateBase;
 
-export type EmbeddingParams = Omit<Parameters<ReturnType<typeof JigsawStack>["embedding"]>["0"], "token_overflow_mode" | "file_store_key">;
+type EmbeddingParamsOriginal = Omit<Parameters<ReturnType<typeof JigsawStack>["embedding"]>["0"], "token_overflow_mode" | "file_store_key">;
 export type EmbeddingResponse = Awaited<ReturnType<ReturnType<typeof JigsawStack>["embedding"]>>;
 
-export interface EmbedParams {
-  type: EmbeddingParams["type"];
-  text: EmbeddingParams["text"];
-  file_content: EmbeddingParams["file_content"];
-  file_url: EmbeddingParams["url"];
+export interface EmbeddingParams {
+  type: EmbeddingParamsOriginal["type"];
+  text: EmbeddingParamsOriginal["text"];
+  fileContent: EmbeddingParamsOriginal["file_content"];
+  url: EmbeddingParamsOriginal["url"];
 }
 
 const messageMap = (prompts: GeneratePromptObj[], removeMedia: boolean = false) => {
@@ -270,11 +276,11 @@ export const createOmiAI = (config?: {
     prompt,
     schema,
     system,
-    context_tool,
+    contextTool,
     reasoning,
-    multi_llm,
+    multiLLM,
     stream,
-    auto_tool = true,
+    autoTool = true,
     temperature = 0,
     topK,
     topP,
@@ -283,7 +289,6 @@ export const createOmiAI = (config?: {
       const toolUsed: ToolUsed[] = [];
 
       const prompts: GeneratePromptObj[] = Array.isArray(prompt) ? prompt : [{ role: "user", content: prompt }];
-
       const lastPromptContent = prompts[prompts.length - 1].content;
       // const allFiles = prompts
       //   .filter((p) => Array.isArray(p.content))
@@ -291,12 +296,12 @@ export const createOmiAI = (config?: {
       //   .flat()
       //   .filter((c) => (c as any).type != "text");
 
-      // console.log("files", files);
-
       const latestPromptFiles = (Array.isArray(lastPromptContent) ? lastPromptContent.filter((c) => (c as any).type != "text") : []).map((f, i) => ({
         ref: `https://onellmref.com/${i}`,
         ...f,
       }));
+
+      const genFiles: Files[] = [];
 
       const tools = {
         web_search: tool({
@@ -345,13 +350,47 @@ export const createOmiAI = (config?: {
             return scrapedData.context;
           },
         }),
+        ai_image_generation: tool({
+          description: "Generate an image given the prompt",
+          parameters: z.object({
+            prompt: z.string().describe("The prompt to generate an image for"),
+          }),
+          execute: async ({ prompt }) => {
+            const image = await jigsaw.image_generation({ prompt: prompt });
+            const blob = await image.blob();
+            genFiles.push({ type: "image", data: blob, mimeType: "image/png" });
+            return "image generated";
+          },
+        }),
+        speech_to_text: tool({
+          description: "Convert speech to text",
+          parameters: z.object({
+            url: z.string().describe("The audio URL to convert to text"),
+          }),
+          execute: async ({ url }) => {
+            const text = await jigsaw.audio.speech_to_text({
+              url: url.includes("https://onellmref.com") ? latestPromptFiles.find((f) => f.ref == url)?.data || url : url,
+            });
+            return text;
+          },
+        }),
+        text_to_speech: tool({
+          description: "Convert text to speech",
+          parameters: z.object({
+            text: z.string().describe("The text to convert to speech"),
+          }),
+          execute: async ({ text }) => {
+            const speech = await jigsaw.audio.text_to_speech({ text: text });
+            const blob = await speech.blob();
+            genFiles.push({ type: "file", data: blob, mimeType: "audio/mpeg" });
+            return "audio generated";
+          },
+        }),
       };
 
       const preConfigModel = (
         await generateObject({
-          model: createFallback({
-            models: [modelList["llama-3.3-70b-specdec"].modelProvider, modelList["gemini-1.5-flash-8b"].modelProvider],
-          }),
+          model: modelList["llama-3.3-70b-specdec"].modelProvider,
           prompt: `List of models:${JSON.stringify(modelListForLLM)}\nList of tools:${Object.keys(tools).join(",")}\nPrompt: ${JSON.stringify(prompts[prompts.length - 1])}`,
           schema: z.object({
             model: z.string().describe("The best AI model based on the prompt, context and files"),
@@ -374,7 +413,7 @@ export const createOmiAI = (config?: {
       let searchResult: Awaited<ReturnType<typeof jigsaw.web.search>> | undefined = undefined;
 
       if (latestTextPrompt) {
-        if ((context_tool?.web || preConfigModel.web_search) && context_tool?.web !== false) {
+        if ((contextTool?.web || preConfigModel.web_search) && contextTool?.web !== false) {
           searchResult = await jigsaw.web.search({
             query: latestTextPrompt,
             ai_overview: false,
@@ -406,11 +445,9 @@ export const createOmiAI = (config?: {
         }
       }
 
-      if (preConfigModel.use_tool && auto_tool) {
+      if (preConfigModel.use_tool && autoTool) {
         const toolResult = await generateText({
-          model: createFallback({
-            models: [modelList["gpt-4o"].modelProvider, groq("llama-3.3-70b-versatile"), openai("gpt-4o-mini")],
-          }),
+          model: modelList["gpt-4o"].modelProvider,
           prompt:
             latestTextPrompt && latestPromptFiles
               ? `${latestTextPrompt}\nfiles: ${JSON.stringify(latestPromptFiles.map((f) => f.ref))}`
@@ -454,11 +491,8 @@ export const createOmiAI = (config?: {
       let reasoningText: string | undefined = undefined;
 
       if ((reasoning || preConfigModel.reasoning) && reasoning !== false) {
-        console.log("reasoning");
         const reasoningResult = await generateText({
-          model: createFallback({
-            models: [deepseek("deepseek-reasoner"), deepinfra("deepseek-ai/DeepSeek-R1")],
-          }),
+          model: deepseek("deepseek-reasoner"),
           system,
           messages: messageMap(prompts, true),
           temperature,
@@ -481,7 +515,7 @@ export const createOmiAI = (config?: {
 
       const generateFunction = stream ? streamText : generateText;
 
-      if (multi_llm && !stream) {
+      if (multiLLM && !stream) {
         const multiLLMPromiseResult = await Promise.allSettled(
           Object.keys(modelList).map((m) =>
             generateText({
@@ -504,16 +538,7 @@ export const createOmiAI = (config?: {
       }
 
       const llmResp = await generateFunction({
-        model: createFallback({
-          models: [
-            modelConfig.modelProvider,
-            modelConfig?.fallback && modelList[modelConfig?.fallback]
-              ? modelList[modelConfig?.fallback].modelProvider
-              : modelConfig.id == "gpt-4o"
-                ? google("gemini-1.5-flash")
-                : openai("gpt-4o"),
-          ],
-        }),
+        model: modelConfig.modelProvider,
         system,
         messages: messageMap(prompts),
         experimental_output: schema
@@ -529,10 +554,10 @@ export const createOmiAI = (config?: {
       let llmResult = llmResp as GenerateResponse;
 
       llmResult["toolUsed"] = toolUsed;
-      llmResult["model_id"] = selectedModelID;
-
+      llmResult["modelId"] = selectedModelID;
+      llmResult["files"] = genFiles;
       if (reasoningText) {
-        llmResult["reasoning_text"] = reasoningText;
+        llmResult["reasoningText"] = reasoningText;
       }
 
       if (schema) {
@@ -553,7 +578,7 @@ export const createOmiAI = (config?: {
     const resp = await jigsaw.embedding({
       type: params.type,
       text: params.text,
-      file_content: params.file_content,
+      file_content: params.fileContent,
       url: params.url,
       token_overflow_mode: "error",
     });

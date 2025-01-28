@@ -170,20 +170,20 @@ console.log(result.embeddings);
 
 ### `omi.generate`
 
-`reasoning`, `context_tool`, `auto_tool` and the actual LLM that will execute your prompt are all automatically decided based on your prompt. You can turn off auto decisions for any of these by setting the relevant to `false`. You can also force them to run by setting them to `true`. If the field is `undefined` or not provided, it will be set to auto.
+`reasoning`, `contextTool`, `autoTool` and the actual LLM that will execute your prompt are all automatically decided based on your prompt. You can turn off auto decisions for any of these by setting the relevant to `false`. You can also force them to run by setting them to `true`. If the field is `undefined` or not provided, it will be set to auto.
 
 ```ts
 interface GenerateParams {
   stream?: boolean;
   reasoning?: boolean; // Auto turns on depending on prompt. Set to true to force reasoning. Set to false to disable auto-reasoning.
-  multi_llm?: boolean; // Turn on if you want to run your prompt across all models then merge the results.
+  multiLLM?: boolean; // Turn on if you want to run your prompt across all models then merge the results.
   system?: string;
   prompt: string | GeneratePromptObj[]; // String prompt or array which will treated as messages.
   schema?: z.ZodSchema; // Schema to use for structured output.
-  context_tool?: {
+  contextTool?: {
     web?: boolean; //Auto turns on depending on prompt. Set to true to force web-search. Set to false to disable web-search.
   };
-  auto_tool?: boolean; // Auto turns on depending on prompt. Set to true to force tool-calling. Set to false to disable tool-calling.
+  autoTool?: boolean; // Auto turns on depending on prompt. Set to true to force tool-calling. Set to false to disable tool-calling.
   temperature?: number;
   topK?: number;
   topP?: number;
@@ -210,6 +210,6 @@ interface EmbeddingParams {
   type: "audio" | "image" | "pdf" | "text" | "text-other";
   text?: string;
   url?: string;
-  file_content?: string;
+  fileContent?: string;
 }
 ```
