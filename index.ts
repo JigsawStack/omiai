@@ -8,7 +8,9 @@ import {
   CoreMessage,
   CoreTool,
   CoreUserMessage,
+  GenerateObjectResult,
   GenerateTextResult,
+  LanguageModelV1,
   Output,
   StreamTextResult,
   generateObject,
@@ -64,7 +66,6 @@ type GenerateBase = {
   reasoningText?: string;
   object?: Awaited<ReturnType<typeof generateText>>["experimental_output"];
   partialObjectStream?: ReturnType<typeof streamText>["experimental_partialOutputStream"];
-  modelId: string;
   textStream?: ReturnType<typeof streamText>["textStream"];
   files?: Files[];
 };
@@ -101,6 +102,21 @@ const messageMap = (prompts: GeneratePromptObj[], removeMedia: boolean = false) 
   }));
 
   return messageMapped;
+};
+
+const fallback = async <T, H, G>(key: string, item: T[], genFunc: (args?: H) => Promise<G>) => {
+  let index = -1;
+  do {
+    try {
+      const resp = await genFunc(index >= 0 ? ({ [key]: item[index] } as H) : undefined);
+      return resp;
+    } catch (error) {
+      index++;
+      if (index >= item.length) {
+        throw error;
+      }
+    }
+  } while (index < item.length);
 };
 
 export const createOmiAI = (config?: {
@@ -389,22 +405,27 @@ export const createOmiAI = (config?: {
       };
 
       const preConfigModel = (
-        await generateObject({
-          model: modelList["llama-3.3-70b-specdec"].modelProvider,
-          prompt: `List of models:${JSON.stringify(modelListForLLM)}\nList of tools:${Object.keys(tools).join(",")}\nPrompt: ${JSON.stringify(prompts[prompts.length - 1])}`,
-          schema: z.object({
-            model: z.string().describe("The best AI model based on the prompt, context and files"),
-            web_search: z.boolean().describe("Whether to use web search for the prompt"),
-            reasoning: z
-              .boolean()
-              .describe(
-                "Whether to use reasoning which requires a longer thinking process and more depth before answering. Only use this for the more complex tasks like maths, counting characters, counting, science & research"
-              ),
-            use_tool: z.boolean().describe("Is there a possibility that the task requires a tool to achieve it's goal from the list of tool?"),
-          }),
-          temperature: 0,
-        })
-      ).object;
+        await fallback<LanguageModelV1, any, GenerateObjectResult<any>>("model", [modelList["gemini-1.5-flash-8b"].modelProvider], (args) =>
+          generateObject({
+            model: modelList["llama-3.3-70b-specdec"].modelProvider,
+            prompt: `List of models:${JSON.stringify(modelListForLLM)}\nList of tools:${Object.keys(tools).join(",")}\nPrompt: ${JSON.stringify(prompts[prompts.length - 1])}`,
+            schema: z.object({
+              model: z.string().describe("The best AI model based on the prompt, context and files"),
+              web_search: z.boolean().describe("Whether to use web search for the prompt"),
+              reasoning: z
+                .boolean()
+                .describe(
+                  "Whether to use reasoning which requires a longer thinking process and more depth before answering. Only use this for the more complex tasks like maths, counting characters, counting, science & research"
+                ),
+              use_tool: z.boolean().describe("Is there a possibility that the task requires a tool to achieve it's goal from the list of tool?"),
+            }),
+            temperature: 0,
+            ...args,
+          })
+        )
+      )?.object;
+
+      console.log("preConfigModel: ", preConfigModel);
 
       const selectedModelID = preConfigModel.model;
       const modelConfig = modelList[selectedModelID];
@@ -446,32 +467,38 @@ export const createOmiAI = (config?: {
       }
 
       if (preConfigModel.use_tool && autoTool) {
-        const toolResult = await generateText({
-          model: modelList["gpt-4o"].modelProvider,
-          prompt:
-            latestTextPrompt && latestPromptFiles
-              ? `${latestTextPrompt}\nfiles: ${JSON.stringify(latestPromptFiles.map((f) => f.ref))}`
-              : latestTextPrompt,
-          // messages: messageMap([prompts[prompts.length - 1]], true),
-          system,
-          tools: tools,
-          toolChoice: "auto",
-          maxSteps: 5,
-          temperature,
-          topK,
-          topP,
-        });
+        const toolResult = await fallback<LanguageModelV1, any, GenerateTextResult<any, any>>(
+          "model",
+          [groq("llama-3.3-70b-versatile"), openai("gpt-4o-mini")],
+          (args) =>
+            generateText({
+              model: modelList["gpt-4o"].modelProvider,
+              prompt:
+                latestTextPrompt && latestPromptFiles
+                  ? `${latestTextPrompt}\nfiles: ${JSON.stringify(latestPromptFiles.map((f) => f.ref))}`
+                  : latestTextPrompt,
+              system,
+              tools: tools,
+              toolChoice: "auto",
+              maxSteps: 5,
+              temperature,
+              topK,
+              topP,
+              ...args,
+            })
+        );
 
-        const toolText = toolResult.text;
+        const toolText = toolResult?.text;
 
-        const allToolCalls = toolResult.steps
-          .map((s) =>
-            s.toolCalls.map((t, i) => ({
-              ...t,
-              result: s.toolResults[i].result,
-            }))
-          )
-          .flat();
+        const allToolCalls =
+          toolResult?.steps
+            .map((s) =>
+              s.toolCalls.map((t, i) => ({
+                ...t,
+                result: s.toolResults[i].result,
+              }))
+            )
+            .flat() || [];
 
         toolUsed.push(
           ...allToolCalls.map((t) => ({
@@ -491,15 +518,21 @@ export const createOmiAI = (config?: {
       let reasoningText: string | undefined = undefined;
 
       if ((reasoning || preConfigModel.reasoning) && reasoning !== false) {
-        const reasoningResult = await generateText({
-          model: deepseek("deepseek-reasoner"),
-          system,
-          messages: messageMap(prompts, true),
-          temperature,
-          topK,
-          topP,
-          maxTokens: undefined,
-        });
+        const reasoningResult = await fallback<LanguageModelV1, any, GenerateTextResult<any, any>>(
+          "model",
+          [deepinfra("deepseek-ai/DeepSeek-R1"), deepseek("deepseek-reasoner")],
+          (args) =>
+            generateText({
+              model: groq("deepseek-r1-distill-llama-70b"),
+              system,
+              messages: messageMap(prompts, true),
+              temperature,
+              topK,
+              topP,
+              maxTokens: undefined,
+              ...args,
+            })
+        );
 
         reasoningText = reasoningResult?.reasoning || reasoningResult?.text;
 
@@ -537,24 +570,35 @@ export const createOmiAI = (config?: {
         });
       }
 
-      const llmResp = await generateFunction({
-        model: modelConfig.modelProvider,
-        system,
-        messages: messageMap(prompts),
-        experimental_output: schema
-          ? Output.object({
-              schema,
-            })
-          : undefined,
-        temperature,
-        topK,
-        topP,
-      });
+      const llmResp = await fallback<LanguageModelV1, any, any>(
+        "model",
+        [
+          modelConfig?.fallback && modelList[modelConfig?.fallback]
+            ? modelList[modelConfig?.fallback].modelProvider
+            : modelConfig.id == "gpt-4o"
+              ? google("gemini-1.5-flash")
+              : openai("gpt-4o"),
+        ],
+        (args) =>
+          generateFunction({
+            model: modelConfig.modelProvider,
+            system,
+            messages: messageMap(prompts),
+            experimental_output: schema
+              ? Output.object({
+                  schema,
+                })
+              : undefined,
+            temperature,
+            topK,
+            topP,
+            ...args,
+          }) as any
+      );
 
       let llmResult = llmResp as GenerateResponse;
 
       llmResult["toolUsed"] = toolUsed;
-      llmResult["modelId"] = selectedModelID;
       llmResult["files"] = genFiles;
       if (reasoningText) {
         llmResult["reasoningText"] = reasoningText;
