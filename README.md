@@ -225,6 +225,16 @@ const result = await omi.embedding({
 console.log(result.embeddings);
 ```
 
+### Image generation
+
+```ts
+const result = await omi.generate({
+  prompt: "Generate an image of a cat",
+});
+
+const blob: Blob = result?.files?.[0].data;
+```
+
 ### Tool calling
 
 You can pass your own tools to the SDK by using the `tools` parameter. This is tool function params is based on the Vercel's AI SDK. [Check out full docs for tools here](https://sdk.vercel.ai/docs/ai-sdk-core/tools-and-tool-calling)

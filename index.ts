@@ -1,6 +1,6 @@
 import { AnthropicProviderSettings, createAnthropic } from "@ai-sdk/anthropic";
 import { DeepInfraProviderSettings, createDeepInfra } from "@ai-sdk/deepinfra";
-import { GoogleGenerativeAIProviderSettings, createGoogleGenerativeAI } from "@ai-sdk/google";
+import { GoogleGenerativeAIProviderSettings, createGoogleGenerativeAI, google } from "@ai-sdk/google";
 import { GroqProviderSettings, createGroq } from "@ai-sdk/groq";
 import { OpenAIProviderSettings, createOpenAI } from "@ai-sdk/openai";
 import {
@@ -154,7 +154,7 @@ const decidePreConfig = async (modelList: { [key: string]: any }, tools: { [key:
   let preConfig: z.infer<typeof preConfigSchema> | null = null;
 
   preConfig = (
-    await fallback<LanguageModelV1, any, GenerateObjectResult<any>>("model", [modelList["gemini-1.5-flash-8b"].modelProvider], (args) =>
+    await fallback<LanguageModelV1, any, GenerateObjectResult<any>>("model", [google("gemini-1.5-flash-8b")], (args) =>
       generateObject({
         model: modelList["llama-3.3-70b-specdec"].modelProvider,
         prompt: preConfigPrompt,
@@ -224,37 +224,6 @@ export const createOmiAI = (config?: {
       modelProvider: any;
     };
   } = {
-    "gemini-1.5-flash-8b": {
-      id: "gemini-1.5-flash-8b",
-      speed: 4,
-      smarts: 3,
-      context_window: 1000000,
-      file_type_support: ["audio", "image", "video", "pdf", "text"],
-      description: "Great for simple tasks that may require a large context. Also great for all file types.",
-      specialty: ["large-files"],
-      fallback: null,
-      modelProvider: google("gemini-1.5-flash-8b", {
-        structuredOutputs: false,
-        safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold: "BLOCK_NONE",
-          },
-        ],
-      }),
-    },
     "gemini-1.5-flash": {
       id: "gemini-1.5-flash",
       speed: 3,
@@ -316,7 +285,7 @@ export const createOmiAI = (config?: {
       file_type_support: ["text"],
       description: "Great for simple tasks that require speed and tool use.",
       specialty: ["small-tasks"],
-      fallback: "gemini-1.5-flash-8b",
+      fallback: null,
       modelProvider: groq("llama-3.3-70b-specdec"),
     },
   };
@@ -410,7 +379,7 @@ export const createOmiAI = (config?: {
             const image = await jigsaw.image_generation({ prompt: prompt });
             const blob = await image.blob();
             genFiles.push({ type: "image", data: blob, mimeType: "image/png" });
-            return "image generated";
+            return "image generated and added to files";
           },
         }),
         speech_to_text: tool({
@@ -440,8 +409,6 @@ export const createOmiAI = (config?: {
       };
 
       const preConfigModel = await decidePreConfig(modelList, allTools, prompts);
-
-      console.log("preConfigModel", preConfigModel);
 
       const selectedModelID = preConfigModel.model;
       const modelConfig = modelList[selectedModelID];
@@ -482,29 +449,28 @@ export const createOmiAI = (config?: {
         }
       }
 
+      let toolText: string | undefined = undefined;
+
       if (preConfigModel.use_tool && autoTool) {
-        const toolResult = await fallback<LanguageModelV1, any, GenerateTextResult<any, any>>(
-          "model",
-          [groq("llama-3.3-70b-versatile"), openai("gpt-4o-mini")],
-          (args) =>
-            generateText({
-              model: modelList["gpt-4o"].modelProvider,
-              prompt:
-                latestTextPrompt && latestPromptFiles
-                  ? `${latestTextPrompt}\nfiles: ${JSON.stringify(latestPromptFiles.map((f) => f.ref))}`
-                  : latestTextPrompt,
-              system,
-              tools: allTools,
-              toolChoice: "auto",
-              maxSteps: 5,
-              temperature,
-              topK,
-              topP,
-              ...args,
-            })
+        const toolResult = await fallback<LanguageModelV1, any, GenerateTextResult<any, any>>("model", [groq("llama-3.3-70b-versatile")], (args) =>
+          generateText({
+            model: openai("gpt-4o-mini"),
+            prompt:
+              latestTextPrompt && latestPromptFiles
+                ? `${latestTextPrompt}\nfiles: ${JSON.stringify(latestPromptFiles.map((f) => f.ref))}`
+                : latestTextPrompt,
+            system,
+            tools: allTools,
+            toolChoice: "auto",
+            maxSteps: 5,
+            temperature,
+            topK,
+            topP,
+            ...args,
+          })
         );
 
-        const toolText = toolResult?.text;
+        toolText = toolResult?.text;
 
         const allToolCalls =
           toolResult?.steps
@@ -525,7 +491,7 @@ export const createOmiAI = (config?: {
           }))
         );
 
-        prompts.splice(prompts.length - 1, 0, {
+        prompts.splice(prompts.length, 0, {
           role: "user",
           content: `Tool result: ${toolText}`,
         });
@@ -597,7 +563,7 @@ export const createOmiAI = (config?: {
         ],
         (args) =>
           generateFunction({
-            model: reasoningText && modelConfig.id.includes("llama-3.3") ? google("gemini-1.5-flash-8b") : modelConfig.modelProvider,
+            model: reasoningText && modelConfig.id.includes("llama-3.3") ? google("gemini-1.5-flash") : modelConfig.modelProvider,
             system,
             messages: messageMap(prompts),
             experimental_output: schema
