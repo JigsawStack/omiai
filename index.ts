@@ -470,8 +470,6 @@ export const createOmiAI = (config?: {
 
       const preConfigModel = await decidePreConfig(modelList, tools, prompts);
 
-      console.log("preConfigModel: ", preConfigModel);
-
       const selectedModelID = preConfigModel.model;
       const modelConfig = modelList[selectedModelID];
 

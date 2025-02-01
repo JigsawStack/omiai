@@ -11,7 +11,7 @@
   },
   "keywords": ["framework", "ai", "llm", "react"],
   "type": "module",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "packageManager": "yarn@1.22.22",
   "license": "Apache-2.0",
   "engines": {
@@ -32,7 +32,7 @@
     }
   },
   "scripts": {
-    "build": "pkgroll --src=./",
+    "build": "pkgroll --minify --src=./",
     "format": "biome check --write ."
   },
   "dependencies": {
