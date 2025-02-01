@@ -1,6 +1,5 @@
 import { AnthropicProviderSettings, createAnthropic } from "@ai-sdk/anthropic";
 import { DeepInfraProviderSettings, createDeepInfra } from "@ai-sdk/deepinfra";
-import { DeepSeekProviderSettings, createDeepSeek } from "@ai-sdk/deepseek";
 import { GoogleGenerativeAIProviderSettings, createGoogleGenerativeAI } from "@ai-sdk/google";
 import { GroqProviderSettings, createGroq } from "@ai-sdk/groq";
 import { OpenAIProviderSettings, createOpenAI } from "@ai-sdk/openai";
@@ -20,6 +19,8 @@ import {
 } from "ai";
 import { JigsawStack } from "jigsawstack";
 import { z } from "zod";
+// import { getLlama, LlamaChatSession, resolveModelFile } from "node-llama-cpp";
+// import zodToJsonSchema from "zod-to-json-schema";
 
 export interface GeneratePromptObj {
   role: CoreUserMessage["role"];
@@ -84,6 +85,8 @@ export interface EmbeddingParams {
   url: EmbeddingParamsOriginal["url"];
 }
 
+const isNode = () => typeof process !== "undefined" && !!process.versions && !!process.versions.node;
+
 const messageMap = (prompts: GeneratePromptObj[], removeMedia: boolean = false) => {
   const messageMapped: CoreMessage[] = prompts.map((m) => ({
     content:
@@ -119,12 +122,92 @@ const fallback = async <T, H, G>(key: string, item: T[], genFunc: (args?: H) => 
   } while (index < item.length);
 };
 
+const preConfigSchema = z.object({
+  model: z.string().describe("The best AI model based on the prompt, context and files"),
+  reasoning: z
+    .boolean()
+    .describe(
+      "Whether to use reasoning/thinking which requires a longer thinking process and more depth before answering. Only use this for more complex tasks like maths, character counting, general counting, coding, science & research"
+    ),
+  web_search: z.boolean().describe("Whether to search the web to gather more context before answering"),
+  use_tool: z.boolean().describe("Is there a possibility that the task requires a tool to achieve it's goal from the list of tool?"),
+});
+
+const decidePreConfig = async (modelList: { [key: string]: any }, tools: { [key: string]: any }, prompts: any[]) => {
+  const modelKeys = Object.keys(modelList);
+
+  const modelListForLLM = modelKeys
+    .map((key) => {
+      return {
+        ...modelList[key],
+        modelProvider: undefined,
+      };
+    })
+    .reduce((acc, curr, index) => {
+      acc[modelKeys[index]] = curr;
+      return acc;
+    }, {});
+
+  const preConfigPrompt = `List of models:${JSON.stringify(modelListForLLM)}\nList of tools:${Object.keys(tools).join(",")}\nPrompt: ${JSON.stringify(prompts[prompts.length - 1])}`;
+
+  let preConfig: z.infer<typeof preConfigSchema> | null = null;
+
+  // console.log("local model");
+  // console.time("time");
+  // const [path, { fileURLToPath }] = await Promise.all([import("path"), import("url")]);
+  // const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  // const modelsDirectory = path.join(__dirname, "models");
+
+  // console.log("modelsDirectory: ", modelsDirectory);
+
+  // const modelPath = await resolveModelFile("hf:bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF:Q4_K_M", modelsDirectory);
+
+  // console.log("modelPath: ", modelPath);
+
+  // const llama = await getLlama({
+  //   gpu: false,
+  // });
+
+  // const model = await llama.loadModel({
+  //   modelPath: modelPath,
+  // });
+  // const context = await model.createContext();
+  // const session = new LlamaChatSession({
+  //   contextSequence: context.getSequence(),
+  // });
+
+  // const preConfigSchemaJson = zodToJsonSchema(preConfigSchema);
+  // delete preConfigSchemaJson.$schema;
+
+  // const grammar = await llama.createGrammarForJsonSchema(preConfigSchemaJson as any);
+  // preConfigModel = grammar.parse(await session.prompt(preConfigPrompt, { grammar })) as any;
+
+  // console.timeEnd("time");
+
+  preConfig = (
+    await fallback<LanguageModelV1, any, GenerateObjectResult<any>>("model", [modelList["gemini-1.5-flash-8b"].modelProvider], (args) =>
+      generateObject({
+        model: modelList["llama-3.3-70b-specdec"].modelProvider,
+        prompt: preConfigPrompt,
+        schema: preConfigSchema,
+        temperature: 0,
+        ...args,
+      })
+    )
+  )?.object;
+
+  if (!preConfig) {
+    throw new Error("Failed to decide preConfigModel");
+  }
+
+  return preConfig;
+};
+
 export const createOmiAI = (config?: {
   groqProviderConfig?: GroqProviderSettings;
   googleProviderConfig?: GoogleGenerativeAIProviderSettings;
   openaiProviderConfig?: OpenAIProviderSettings;
   anthropicProviderConfig?: AnthropicProviderSettings;
-  deepseekProviderConfig?: DeepSeekProviderSettings;
   deepinfraProviderConfig?: DeepInfraProviderSettings;
   jigsawProviderConfig?: NonNullable<Parameters<typeof JigsawStack>["0"]>;
 }) => {
@@ -147,11 +230,6 @@ export const createOmiAI = (config?: {
   const anthropic = createAnthropic({
     apiKey: process.env?.ANTHROPIC_API_KEY || undefined,
     ...config?.anthropicProviderConfig,
-  });
-
-  const deepseek = createDeepSeek({
-    apiKey: process.env?.DEEPSEEK_API_KEY || undefined,
-    ...config?.deepseekProviderConfig,
   });
 
   const deepinfra = createDeepInfra({
@@ -274,20 +352,6 @@ export const createOmiAI = (config?: {
     },
   };
 
-  const modelKeys = Object.keys(modelList);
-
-  const modelListForLLM = modelKeys
-    .map((key) => {
-      return {
-        ...modelList[key],
-        modelProvider: undefined,
-      };
-    })
-    .reduce((acc, curr, index) => {
-      acc[modelKeys[index]] = curr;
-      return acc;
-    }, {});
-
   const generate = async ({
     prompt,
     schema,
@@ -404,26 +468,7 @@ export const createOmiAI = (config?: {
         }),
       };
 
-      const preConfigModel = (
-        await fallback<LanguageModelV1, any, GenerateObjectResult<any>>("model", [modelList["gemini-1.5-flash-8b"].modelProvider], (args) =>
-          generateObject({
-            model: modelList["llama-3.3-70b-specdec"].modelProvider,
-            prompt: `List of models:${JSON.stringify(modelListForLLM)}\nList of tools:${Object.keys(tools).join(",")}\nPrompt: ${JSON.stringify(prompts[prompts.length - 1])}`,
-            schema: z.object({
-              model: z.string().describe("The best AI model based on the prompt, context and files"),
-              web_search: z.boolean().describe("Whether to use web search for the prompt"),
-              reasoning: z
-                .boolean()
-                .describe(
-                  "Whether to use reasoning which requires a longer thinking process and more depth before answering. Only use this for the more complex tasks like maths, counting characters, counting, science & research"
-                ),
-              use_tool: z.boolean().describe("Is there a possibility that the task requires a tool to achieve it's goal from the list of tool?"),
-            }),
-            temperature: 0,
-            ...args,
-          })
-        )
-      )?.object;
+      const preConfigModel = await decidePreConfig(modelList, tools, prompts);
 
       console.log("preConfigModel: ", preConfigModel);
 
@@ -520,10 +565,15 @@ export const createOmiAI = (config?: {
       if ((reasoning || preConfigModel.reasoning) && reasoning !== false) {
         const reasoningResult = await fallback<LanguageModelV1, any, GenerateTextResult<any, any>>(
           "model",
-          [deepinfra("deepseek-ai/DeepSeek-R1"), deepseek("deepseek-reasoner")],
+          latestTextPrompt?.length && latestTextPrompt?.length <= 1000
+            ? [deepinfra("deepseek-ai/DeepSeek-R1"), openai("o3-mini-2025-01-31")]
+            : [openai("o3-mini-2025-01-31")],
           (args) =>
             generateText({
-              model: groq("deepseek-r1-distill-llama-70b"),
+              model:
+                latestTextPrompt?.length && latestTextPrompt?.length <= 1000
+                  ? groq("deepseek-r1-distill-llama-70b")
+                  : deepinfra("deepseek-ai/DeepSeek-R1"),
               system,
               messages: messageMap(prompts, true),
               temperature,
