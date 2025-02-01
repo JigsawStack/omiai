@@ -6,7 +6,6 @@ import { OpenAIProviderSettings, createOpenAI } from "@ai-sdk/openai";
 import {
   CoreMessage,
   CoreTool,
-  CoreUserMessage,
   GenerateObjectResult,
   GenerateTextResult,
   LanguageModelV1,
@@ -19,11 +18,10 @@ import {
 } from "ai";
 import { JigsawStack } from "jigsawstack";
 import { z } from "zod";
-// import { getLlama, LlamaChatSession, resolveModelFile } from "node-llama-cpp";
-// import zodToJsonSchema from "zod-to-json-schema";
+export { tool };
 
 export interface GeneratePromptObj {
-  role: CoreUserMessage["role"];
+  role: CoreMessage["role"];
   content:
     | string
     | {
@@ -47,6 +45,9 @@ export interface GenerateParams {
   temperature?: number;
   topK?: number;
   topP?: number;
+  tools?: {
+    [key: string]: CoreTool<any, any>;
+  };
 }
 
 interface ToolUsed {
@@ -148,41 +149,9 @@ const decidePreConfig = async (modelList: { [key: string]: any }, tools: { [key:
       return acc;
     }, {});
 
-  const preConfigPrompt = `List of models:${JSON.stringify(modelListForLLM)}\nList of tools:${Object.keys(tools).join(",")}\nPrompt: ${JSON.stringify(prompts[prompts.length - 1])}`;
+  const preConfigPrompt = `List of models:${JSON.stringify(modelListForLLM)}\nList of tools:${Object.keys(tools).reverse().join(",")}\nPrompt: ${JSON.stringify(prompts[prompts.length - 1])}`;
 
   let preConfig: z.infer<typeof preConfigSchema> | null = null;
-
-  // console.log("local model");
-  // console.time("time");
-  // const [path, { fileURLToPath }] = await Promise.all([import("path"), import("url")]);
-  // const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  // const modelsDirectory = path.join(__dirname, "models");
-
-  // console.log("modelsDirectory: ", modelsDirectory);
-
-  // const modelPath = await resolveModelFile("hf:bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF:Q4_K_M", modelsDirectory);
-
-  // console.log("modelPath: ", modelPath);
-
-  // const llama = await getLlama({
-  //   gpu: false,
-  // });
-
-  // const model = await llama.loadModel({
-  //   modelPath: modelPath,
-  // });
-  // const context = await model.createContext();
-  // const session = new LlamaChatSession({
-  //   contextSequence: context.getSequence(),
-  // });
-
-  // const preConfigSchemaJson = zodToJsonSchema(preConfigSchema);
-  // delete preConfigSchemaJson.$schema;
-
-  // const grammar = await llama.createGrammarForJsonSchema(preConfigSchemaJson as any);
-  // preConfigModel = grammar.parse(await session.prompt(preConfigPrompt, { grammar })) as any;
-
-  // console.timeEnd("time");
 
   preConfig = (
     await fallback<LanguageModelV1, any, GenerateObjectResult<any>>("model", [modelList["gemini-1.5-flash-8b"].modelProvider], (args) =>
@@ -364,6 +333,7 @@ export const createOmiAI = (config?: {
     temperature = 0,
     topK,
     topP,
+    tools,
   }: GenerateParams) => {
     try {
       const toolUsed: ToolUsed[] = [];
@@ -383,7 +353,8 @@ export const createOmiAI = (config?: {
 
       const genFiles: Files[] = [];
 
-      const tools = {
+      const allTools = {
+        ...tools,
         web_search: tool({
           description: "Search the web for the given query",
           parameters: z.object({
@@ -468,7 +439,9 @@ export const createOmiAI = (config?: {
         }),
       };
 
-      const preConfigModel = await decidePreConfig(modelList, tools, prompts);
+      const preConfigModel = await decidePreConfig(modelList, allTools, prompts);
+
+      console.log("preConfigModel", preConfigModel);
 
       const selectedModelID = preConfigModel.model;
       const modelConfig = modelList[selectedModelID];
@@ -504,7 +477,7 @@ export const createOmiAI = (config?: {
 
           prompts.splice(prompts.length - 1, 0, {
             role: "user",
-            content: [{ type: "text", data: `Web search result: ${JSON.stringify(webSearchResultMap)}` }],
+            content: `Web search result: ${JSON.stringify(webSearchResultMap)}`,
           });
         }
       }
@@ -521,7 +494,7 @@ export const createOmiAI = (config?: {
                   ? `${latestTextPrompt}\nfiles: ${JSON.stringify(latestPromptFiles.map((f) => f.ref))}`
                   : latestTextPrompt,
               system,
-              tools: tools,
+              tools: allTools,
               toolChoice: "auto",
               maxSteps: 5,
               temperature,
@@ -554,7 +527,7 @@ export const createOmiAI = (config?: {
 
         prompts.splice(prompts.length - 1, 0, {
           role: "user",
-          content: [{ type: "text", data: `Tool result: ${toolText}` }],
+          content: `Tool result: ${toolText}`,
         });
       }
 
@@ -563,15 +536,10 @@ export const createOmiAI = (config?: {
       if ((reasoning || preConfigModel.reasoning) && reasoning !== false) {
         const reasoningResult = await fallback<LanguageModelV1, any, GenerateTextResult<any, any>>(
           "model",
-          latestTextPrompt?.length && latestTextPrompt?.length <= 1000
-            ? [deepinfra("deepseek-ai/DeepSeek-R1"), openai("o3-mini-2025-01-31")]
-            : [openai("o3-mini-2025-01-31")],
+          [deepinfra("deepseek-ai/DeepSeek-R1")],
           (args) =>
             generateText({
-              model:
-                latestTextPrompt?.length && latestTextPrompt?.length <= 1000
-                  ? groq("deepseek-r1-distill-llama-70b")
-                  : deepinfra("deepseek-ai/DeepSeek-R1"),
+              model: openai("o3-mini"),
               system,
               messages: messageMap(prompts, true),
               temperature,
@@ -590,13 +558,13 @@ export const createOmiAI = (config?: {
 
         prompts.splice(prompts.length - 1, 0, {
           role: "user",
-          content: [{ type: "text", data: `Reasoning context: ${reasoningText}` }],
+          content: `Context: ${reasoningText}`,
         });
       }
 
       const generateFunction = stream ? streamText : generateText;
 
-      if (multiLLM && !stream) {
+      if (multiLLM) {
         const multiLLMPromiseResult = await Promise.allSettled(
           Object.keys(modelList).map((m) =>
             generateText({
@@ -629,7 +597,7 @@ export const createOmiAI = (config?: {
         ],
         (args) =>
           generateFunction({
-            model: modelConfig.modelProvider,
+            model: reasoningText && modelConfig.id.includes("llama-3.3") ? google("gemini-1.5-flash-8b") : modelConfig.modelProvider,
             system,
             messages: messageMap(prompts),
             experimental_output: schema

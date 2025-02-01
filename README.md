@@ -9,7 +9,7 @@ The idea is for OmiAI to be the last framework you need for LLMs where it feels 
 - ⭐ Curated list of models based on model quality, speed and cost
 - 🧠 Automatically picks the best model for each task
 - 🔗 Automatically chains models for complex tasks
-- 🤔 Built-in reasoning (DeepSeek r1, r1-distill 70b, o3-mini)
+- 🤔 Built-in reasoning (o3-mini, DeepSeek r1)
 - 🔨 Built-in tools and tool calling (Image generation, OCR, SST, etc)
 - 🌐 Access to the internet in real-time
 - 🔁 Model rate-limiting fallback, retries
@@ -156,6 +156,53 @@ const result = await omi.generate({
 console.log(result?.object);
 ```
 
+### Reasoning
+
+Reasoning is automated so you don't have to explicitly call it. Based on the complexity of the prompt, it will automatically decide if it needs to use reasoning or not.
+
+If you want to force reasoning, you can set the `reasoning` parameter to `true` or if you want to disable it permanently, set it to `false`. Removing the key will set it to auto.
+
+```ts
+const result = await omi.generate({
+  prompt: "How many r's are there in the text: 'strawberry'?",
+  reasoning: true,
+  schema: z.object({
+    answer: z.number(),
+  }),
+});
+
+console.log("reason: ", result?.reasoningText);
+console.log("result: ", result?.object);
+```
+
+Get the reasoning text from `result?.reasoningText`
+
+### Multi-LLM
+
+Multi-LLM is a technique that runs your prompts across multiple LLMs and merges the results. This is useful if you want to get a more accurate allowing models to cross-check each other.
+
+Note: This can shoot up your costs as it would run it across ~5-6 LLMs in parallel.
+
+```ts
+const result = await omi.generate({
+  prompt: "What is the meaning of life?",
+  multiLLM: true,
+});
+```
+
+### Web search
+
+Web search is automated so you don't have to explicitly turn it on. It will automatically decide if it needs to use web search or not based on the prompt. You can also force it to run by setting the `contextTool.web` parameter to `true` or if you want to disable it permanently, set it to `false`. Removing the key will set it to auto.
+
+```ts
+const result = await omi.generate({
+  prompt: "What won the US presidential election in 2025?",
+  contextTool: {
+    web: true,
+  },
+});
+```
+
 ### Embeddings
 
 The embedding model is powered by [JigsawStack](https://jigsawstack.com) and you can view the [full docs here](https://jigsawstack.com/embedding)
@@ -176,6 +223,32 @@ const result = await omi.embedding({
 });
 
 console.log(result.embeddings);
+```
+
+### Tool calling
+
+You can pass your own tools to the SDK by using the `tools` parameter. This is tool function params is based on the Vercel's AI SDK. [Check out full docs for tools here](https://sdk.vercel.ai/docs/ai-sdk-core/tools-and-tool-calling)
+
+```ts
+import { createOmiAI, tool } from "omiai";
+
+const omi = createOmiAI();
+
+const result = await omi.generate({
+  prompt: "What is the weather in San Francisco?",
+  tools: {
+    weather: tool({
+      description: "Get the weather in a location",
+      parameters: z.object({
+        location: z.string().describe("The location to get the weather for"),
+      }),
+      execute: async ({ location }) => ({
+        location,
+        temperature: 72 + Math.floor(Math.random() * 21) - 10,
+      }),
+    }),
+  },
+});
 ```
 
 ## SDK Params
@@ -199,10 +272,13 @@ interface GenerateParams {
   temperature?: number;
   topK?: number;
   topP?: number;
+  tools?: {
+    [key: string]: ReturnType<typeof tool>;
+  };
 }
 
 interface GeneratePromptObj {
-  role: CoreUserMessage["role"];
+  role: CoreMessage["role"];
   content:
     | string
     | {
@@ -225,3 +301,7 @@ interface EmbeddingParams {
   fileContent?: string;
 }
 ```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a PR :)
