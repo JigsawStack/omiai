@@ -1,18 +1,22 @@
 # OmiAI SDK
 
-OmiAI is a LLM SDK for Typescript. It is a highly opinionated AI SDK that that's where you don't pick the model, it auto-picks the best model from a suite of curated models depending on your prompt/messages. It includes built-in o1-like reasoning, curated tools, internet access and full multi-modal support.
+![OmiAI](/examples/how_it_works.png)
 
-- Pre-selected list of models based on model quality, speed and cost
-- Automatically picks the best model for each task
-- Automatically chains models for complex tasks
-- Built-in reasoning (DeepSeek r1)
-- Curated built-in tools and tool calling
-- Dynamic web search
-- Simple and easy to use
-- Built on-top of Vercel's AI SDK
-- Built in model rate-limiting fallback, retries
-- Multi-modal LLM support (PDF, Images, Files, Audio, CSV, JSON)
-- Multi-modal embedding model powered by [JigsawStack Embedding](https://jigsawstack.com/embedding)
+OmiAI is an opinionated AI SDK for Typescript that auto-picks the best model from a suite of curated models depending on the prompt. It includes built-in o3-like reasoning, curated tools, internet access and full multi-modal support with almost all media types.
+
+The idea is for OmiAI to be the last framework you need for LLMs where it feels like you're just using one LLM that's good at everything!
+
+- ⭐ Curated list of models based on model quality, speed and cost
+- 🧠 Automatically picks the best model for each task
+- 🔗 Automatically chains models for complex tasks
+- 🤔 Built-in reasoning (DeepSeek r1, r1-distill 70b, o3-mini)
+- 🔨 Built-in tools and tool calling (Image generation, OCR, SST, etc)
+- 🌐 Access to the internet in real-time
+- 🔁 Model rate-limiting fallback, retries
+- 📁 Multimodal LLM support (PDF, Images, Files, Audio, CSV, JSON)
+- 🧮 Multimodal embedding model
+
+Powered by [Vercel's AI SDK](https://sdk.vercel.ai/docs/introduction) for orchestration & [JigsawStack](https://jigsawstack.com/) for tools and embeddings.
 
 ## ⚡️ Quick Install
 
@@ -20,13 +24,21 @@ OmiAI is a LLM SDK for Typescript. It is a highly opinionated AI SDK that that's
 npm i omiai
 ```
 
+Some benefits include:
+
+- Never having to pick to model or deal with over configuration
+- Plug > Prompt > Play
+- Always having full multimodal support regardless of the model
+- Kept up to date with the latest models and features
+- Use reasoning mixed with other models to solve complex tasks
+
 ## Usage
 
 ### Set up
 
-You'll have to set up all api keys for the LLM providers used in the SDK. Check out the `.env.example` file for all api keys needed.
+You'll have to set up all API keys for the LLM providers used in the SDK. Check out the `.env.example` file for all API keys needed.
 
-Either create a `.env` file in the root of your project based on the `.env.example` or pass your api keys in `createOmiAI` like this:
+Either create a `.env` file in the root of your project based on the `.env.example` or pass your API keys in `createOmiAI` like this:
 
 ```ts
 const omi = createOmiAI({
@@ -73,7 +85,7 @@ console.log(result?.object);
 
 ```ts
 const result = await omi.generate({
-  prompt: "Tell me a story of a person that discovered the meaning of life.",
+  prompt: "Tell me a story of a person who discovered the meaning of life.",
   stream: true,
 });
 
@@ -89,7 +101,7 @@ for await (const chunk of result?.textStream) {
 
 ```ts
 const result = await omi.generate({
-  prompt: "Tell me a story of a person that discovered the meaning of life.",
+  prompt: "Tell me a story of a person who discovered the meaning of life.",
   schema: z.object({
     story: z.string().max(1000).describe("The story"),
     character_names: z
@@ -175,15 +187,15 @@ console.log(result.embeddings);
 ```ts
 interface GenerateParams {
   stream?: boolean;
-  reasoning?: boolean; // Auto turns on depending on prompt. Set to true to force reasoning. Set to false to disable auto-reasoning.
+  reasoning?: boolean; // Auto turns on depending on the prompt. Set to true to force reasoning. Set to false to disable auto-reasoning.
   multiLLM?: boolean; // Turn on if you want to run your prompt across all models then merge the results.
   system?: string;
   prompt: string | GeneratePromptObj[]; // String prompt or array which will treated as messages.
   schema?: z.ZodSchema; // Schema to use for structured output.
   contextTool?: {
-    web?: boolean; //Auto turns on depending on prompt. Set to true to force web-search. Set to false to disable web-search.
+    web?: boolean; //Auto turns on depending on the prompt. Set to true to force web-search. Set to false to disable web search.
   };
-  autoTool?: boolean; // Auto turns on depending on prompt. Set to true to force tool-calling. Set to false to disable tool-calling.
+  autoTool?: boolean; // Auto turns on depending on the prompt. Set to true to force tool-calling. Set to false to disable tool-calling.
   temperature?: number;
   topK?: number;
   topP?: number;
