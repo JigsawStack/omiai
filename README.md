@@ -18,6 +18,8 @@ The idea is for OmiAI to be the last framework you need for LLMs where it feels 
 
 Powered by [Vercel's AI SDK](https://sdk.vercel.ai/docs/introduction) for orchestration & [JigsawStack](https://jigsawstack.com/) for tools and embeddings.
 
+View all models being used [here](https://github.com/JigsawStack/omiai/blob/main/index.ts#L226)
+
 ## ⚡️ Quick Install
 
 ```bash
