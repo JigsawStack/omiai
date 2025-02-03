@@ -15,7 +15,7 @@ const run = async () => {
   });
 
   console.log("reason: ", result?.reasoningText);
-  console.log("result: ", result?.object);
+  console.log("result: ", result?.text);
 };
 
 run();

@@ -230,7 +230,8 @@ export const createOmiAI = (config?: {
       smarts: 4,
       context_window: 1000000,
       file_type_support: ["audio", "image", "video", "pdf", "text"],
-      description: "Great for most common tasks and questions that may require a large context. Also great for all file types.",
+      description:
+        "Great for most tasks and, general questions and general web search. Great for large context tasks. Also great for all file types.",
       specialty: ["large-files"],
       fallback: null,
       modelProvider: google("gemini-1.5-flash", {
@@ -324,22 +325,30 @@ export const createOmiAI = (config?: {
 
       const allTools = {
         ...tools,
-        web_search: tool({
-          description: "Search the web for the given query",
-          parameters: z.object({
-            query: z.string().describe("The query to search the web for"),
-          }),
-          execute: async ({ query }) => {
-            const searchResult = await jigsaw.web.search({
-              query,
-              ai_overview: false,
-            });
-            return searchResult.results.map((c) => ({
-              title: c.title,
-              content: c?.content || c?.description,
-              snippets: c.snippets,
-              url: c.url,
-            }));
+        // web_search: tool({
+        //   description: "Search the web for the given query",
+        //   parameters: z.object({
+        //     query: z.string().describe("The query to search the web for"),
+        //   }),
+        //   execute: async ({ query }) => {
+        //     const searchResult = await jigsaw.web.search({
+        //       query,
+        //       ai_overview: false,
+        //     });
+        //     return searchResult.results.map((c) => ({
+        //       title: c.title,
+        //       content: c?.content || c?.description,
+        //       snippets: c.snippets,
+        //       url: c.url,
+        //     }));
+        //   },
+        // }),
+        current_datetime: tool({
+          description:
+            "Get the current date and time in ISO format. Use this tool for queries that references a time such as 'last weekend' or 'last month'",
+          parameters: z.object({}),
+          execute: async () => {
+            return new Date().toISOString();
           },
         }),
         ai_scraper: tool({
@@ -409,6 +418,8 @@ export const createOmiAI = (config?: {
       };
 
       const preConfigModel = await decidePreConfig(modelList, allTools, prompts);
+
+      console.log("preConfigModel: ", preConfigModel);
 
       const selectedModelID = preConfigModel.model;
       const modelConfig = modelList[selectedModelID];
