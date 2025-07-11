@@ -19,8 +19,8 @@ import {
 } from "ai";
 import { JigsawStack } from "jigsawstack";
 import { z } from "zod";
-// import { getLlama, LlamaChatSession, resolveModelFile } from "node-llama-cpp";
-// import zodToJsonSchema from "zod-to-json-schema";
+import { getLlama, LlamaChatSession, resolveModelFile } from "node-llama-cpp";
+import zodToJsonSchema from "zod-to-json-schema";
 
 export interface GeneratePromptObj {
   role: CoreUserMessage["role"];
@@ -152,49 +152,49 @@ const decidePreConfig = async (modelList: { [key: string]: any }, tools: { [key:
 
   let preConfig: z.infer<typeof preConfigSchema> | null = null;
 
-  // console.log("local model");
-  // console.time("time");
-  // const [path, { fileURLToPath }] = await Promise.all([import("path"), import("url")]);
-  // const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  // const modelsDirectory = path.join(__dirname, "models");
+  console.log("local model");
+  console.time("time");
+  const [path, { fileURLToPath }] = await Promise.all([import("path"), import("url")]);
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const modelsDirectory = path.join(__dirname, "models");
 
-  // console.log("modelsDirectory: ", modelsDirectory);
+  console.log("modelsDirectory: ", modelsDirectory);
 
-  // const modelPath = await resolveModelFile("hf:bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF:Q4_K_M", modelsDirectory);
+  const modelPath = await resolveModelFile(`hf:${"bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF"}:Q4_K_M`, modelsDirectory);
 
-  // console.log("modelPath: ", modelPath);
+  console.log("modelPath: ", modelPath);
 
-  // const llama = await getLlama({
-  //   gpu: false,
-  // });
+  const llama = await getLlama({
+    gpu: "auto",
+  });
 
-  // const model = await llama.loadModel({
-  //   modelPath: modelPath,
-  // });
-  // const context = await model.createContext();
-  // const session = new LlamaChatSession({
-  //   contextSequence: context.getSequence(),
-  // });
+  const model = await llama.loadModel({
+    modelPath: modelPath,
+  });
+  const context = await model.createContext();
+  const session = new LlamaChatSession({
+    contextSequence: context.getSequence(),
+  });
 
-  // const preConfigSchemaJson = zodToJsonSchema(preConfigSchema);
-  // delete preConfigSchemaJson.$schema;
+  const preConfigSchemaJson = zodToJsonSchema(preConfigSchema);
+  delete preConfigSchemaJson.$schema;
 
-  // const grammar = await llama.createGrammarForJsonSchema(preConfigSchemaJson as any);
-  // preConfigModel = grammar.parse(await session.prompt(preConfigPrompt, { grammar })) as any;
+  const grammar = await llama.createGrammarForJsonSchema(preConfigSchemaJson as any);
+  preConfig = grammar.parse(await session.prompt(preConfigPrompt, { grammar })) as any;
 
-  // console.timeEnd("time");
+  console.timeEnd("time");
 
-  preConfig = (
-    await fallback<LanguageModelV1, any, GenerateObjectResult<any>>("model", [modelList["gemini-1.5-flash-8b"].modelProvider], (args) =>
-      generateObject({
-        model: modelList["llama-3.3-70b-specdec"].modelProvider,
-        prompt: preConfigPrompt,
-        schema: preConfigSchema,
-        temperature: 0,
-        ...args,
-      })
-    )
-  )?.object;
+  // preConfig = (
+  //   await fallback<LanguageModelV1, any, GenerateObjectResult<any>>("model", [modelList["gemini-2.0-flash"].modelProvider], (args) =>
+  //     generateObject({
+  //       model: modelList["llama-3.3-70b-versatile"].modelProvider,
+  //       prompt: preConfigPrompt,
+  //       schema: preConfigSchema,
+  //       temperature: 0,
+  //       ...args,
+  //     })
+  //   )
+  // )?.object;
 
   if (!preConfig) {
     throw new Error("Failed to decide preConfigModel");
@@ -255,39 +255,8 @@ export const createOmiAI = (config?: {
       modelProvider: any;
     };
   } = {
-    "gemini-1.5-flash-8b": {
-      id: "gemini-1.5-flash-8b",
-      speed: 4,
-      smarts: 3,
-      context_window: 1000000,
-      file_type_support: ["audio", "image", "video", "pdf", "text"],
-      description: "Great for simple tasks that may require a large context. Also great for all file types.",
-      specialty: ["large-files"],
-      fallback: null,
-      modelProvider: google("gemini-1.5-flash-8b", {
-        structuredOutputs: false,
-        safetySettings: [
-          {
-            category: "HARM_CATEGORY_HARASSMENT",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_HATE_SPEECH",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold: "BLOCK_NONE",
-          },
-          {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold: "BLOCK_NONE",
-          },
-        ],
-      }),
-    },
-    "gemini-1.5-flash": {
-      id: "gemini-1.5-flash",
+    "gemini-2.0-flash": {
+      id: "gemini-2.0-flash",
       speed: 3,
       smarts: 4,
       context_window: 1000000,
@@ -317,7 +286,7 @@ export const createOmiAI = (config?: {
         ],
       }),
     },
-    "gpt-4o": {
+    "gpt-4.1": {
       id: "gpt-4o",
       speed: 2,
       smarts: 4,
@@ -339,16 +308,16 @@ export const createOmiAI = (config?: {
       fallback: null,
       modelProvider: anthropic("claude-3-5-sonnet-latest"),
     },
-    "llama-3.3-70b-specdec": {
-      id: "llama-3.3-70b-specdec",
+    "llama-3.3-70b-versatile": {
+      id: "llama-3.3-70b-versatile",
       speed: 5,
       smarts: 2,
-      context_window: 8192,
+      context_window: 128000,
       file_type_support: ["text"],
       description: "Great for simple tasks that require speed and tool use.",
       specialty: ["small-tasks"],
-      fallback: "gemini-1.5-flash-8b",
-      modelProvider: groq("llama-3.3-70b-specdec"),
+      fallback: "gemini-2.0-flash",
+      modelProvider: groq("llama-3.3-70b-versatile"),
     },
   };
 
@@ -470,6 +439,8 @@ export const createOmiAI = (config?: {
 
       const preConfigModel = await decidePreConfig(modelList, tools, prompts);
 
+      console.log("preConfigModel: ", preConfigModel);
+
       const selectedModelID = preConfigModel.model;
       const modelConfig = modelList[selectedModelID];
 
@@ -563,15 +534,10 @@ export const createOmiAI = (config?: {
       if ((reasoning || preConfigModel.reasoning) && reasoning !== false) {
         const reasoningResult = await fallback<LanguageModelV1, any, GenerateTextResult<any, any>>(
           "model",
-          latestTextPrompt?.length && latestTextPrompt?.length <= 1000
-            ? [deepinfra("deepseek-ai/DeepSeek-R1"), openai("o3-mini-2025-01-31")]
-            : [openai("o3-mini-2025-01-31")],
+          [openai("o4-mini"), deepinfra("deepseek-ai/DeepSeek-R1")],
           (args) =>
             generateText({
-              model:
-                latestTextPrompt?.length && latestTextPrompt?.length <= 1000
-                  ? groq("deepseek-r1-distill-llama-70b")
-                  : deepinfra("deepseek-ai/DeepSeek-R1"),
+              model: deepinfra("deepseek-ai/DeepSeek-R1"),
               system,
               messages: messageMap(prompts, true),
               temperature,
